@@ -1,0 +1,85 @@
+# Greenhouse IoT security lab. PROFILE=baseline|hardened selects config/profiles/<PROFILE>/.
+name: iot-lab
+x-py: &py
+  image: iot-lab-py:1
+  env_file: config/profiles/${PROFILE:-baseline}/lab.env
+  networks: [iot]
+  restart: unless-stopped
+networks:
+  iot:
+    driver: bridge
+    internal: true
+    ipam: {config: [{subnet: 10.30.1.0/24}]}
+services:
+  broker:
+    image: eclipse-mosquitto:2.0
+    networks: {iot: {ipv4_address: 10.30.1.10}}
+    volumes:
+      - ./config/profiles/${PROFILE:-baseline}/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./config/profiles/${PROFILE:-baseline}/acl:/mosquitto/config/acl:ro
+      - ./config/certs/ca.crt:/certs/ca.crt:ro
+      - ./config/certs/broker.crt:/certs/broker.crt:ro
+      - ./config/certs/broker.key:/certs/broker.key:ro
+    restart: unless-stopped
+  ingestor:
+    <<: *py
+    command: python /app/ingestor.py
+    networks: {iot: {ipv4_address: 10.30.1.30}}
+    environment: {CLIENT_ID: ingestor}
+    volumes:
+      - ./app:/app:ro
+      - ./data:/data
+      - ./config/certs/ca.crt:/certs/ca.crt:ro
+      - ./config/certs/ingestor.crt:/certs/ingestor.crt:ro
+      - ./config/certs/ingestor.key:/certs/ingestor.key:ro
+  node1: &node
+    <<: *py
+    command: python /app/node.py
+    networks: {iot: {ipv4_address: 10.30.1.21}}
+    environment: {NODE_ID: node1, FAULT: "0"}
+    volumes:
+      - ./app:/app:ro
+      - ./config/certs/ca.crt:/certs/ca.crt:ro
+      - ./config/certs/node1.crt:/certs/node1.crt:ro
+      - ./config/certs/node1.key:/certs/node1.key:ro
+      - ./config/certs/fw_pub.pem:/certs/fw_pub.pem:ro
+  node2:
+    <<: *node
+    networks: {iot: {ipv4_address: 10.30.1.22}}
+    environment: {NODE_ID: node2, FAULT: "0"}
+    volumes:
+      - ./app:/app:ro
+      - ./config/certs/ca.crt:/certs/ca.crt:ro
+      - ./config/certs/node2.crt:/certs/node2.crt:ro
+      - ./config/certs/node2.key:/certs/node2.key:ro
+      - ./config/certs/fw_pub.pem:/certs/fw_pub.pem:ro
+  node3:
+    <<: *node
+    networks: {iot: {ipv4_address: 10.30.1.23}}
+    environment: {NODE_ID: node3, FAULT: "1"}
+    volumes:
+      - ./app:/app:ro
+      - ./config/certs/ca.crt:/certs/ca.crt:ro
+      - ./config/certs/node3.crt:/certs/node3.crt:ro
+      - ./config/certs/node3.key:/certs/node3.key:ro
+      - ./config/certs/fw_pub.pem:/certs/fw_pub.pem:ro
+  admin:
+    <<: *py
+    command: sleep infinity
+    networks: {iot: {ipv4_address: 10.30.1.40}}
+    volumes:
+      - ./app:/app:ro
+      - ./config/certs/ca.crt:/certs/ca.crt:ro
+      - ./config/certs/admin.crt:/certs/admin.crt:ro
+      - ./config/certs/admin.key:/certs/admin.key:ro
+      - ./config/certs/fw_priv.pem:/certs/fw_priv.pem:ro
+  attacker:
+    <<: *py
+    command: sleep infinity
+    networks: {iot: {ipv4_address: 10.30.1.66}}
+    volumes:
+      - ./app:/app:ro
+      - ./config/certs/ca.crt:/certs/ca.crt:ro
+      # a node certificate the attacker "stole" from a captured device (used only in the stolen-key tests)
+      - ./config/certs/node2.crt:/certs/stolen.crt:ro
+      - ./config/certs/node2.key:/certs/stolen.key:ro
