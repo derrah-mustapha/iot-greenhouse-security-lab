@@ -1,0 +1,11 @@
+# every device may only publish its own telemetry and read its own firmware/commands
+pattern write greenhouse/%u/telemetry
+pattern read firmware/%u
+pattern read greenhouse/%u/cmd
+
+user ingestor
+topic read greenhouse/+/telemetry
+
+user admin
+topic write firmware/+
+topic readwrite bench/#
